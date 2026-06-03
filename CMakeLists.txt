@@ -46,9 +46,8 @@ endif()
 
 if(MSVC)
   target_compile_options(yakisoba PRIVATE /W4)
-  target_compile_definitions(yakisoba PRIVATE ENOKEY=126 ENOMSG=42 EILSEQ=84)
 else()
-  target_compile_options(yakisoba PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(yakisoba PRIVATE -Wall -Wextra -Wpedantic -fno-strict-aliasing)
 endif()
 
 set_target_properties(yakisoba PROPERTIES
