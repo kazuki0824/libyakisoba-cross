@@ -40,6 +40,10 @@ if(BUILD_SHARED_LIBS)
   target_compile_definitions(yakisoba PUBLIC YAKISOBA_SHARED)
 endif()
 
+if(WIN32)
+  target_link_libraries(yakisoba PRIVATE ws2_32)
+endif()
+
 if(MSVC)
   target_compile_options(yakisoba PRIVATE /W4)
   target_compile_definitions(yakisoba PRIVATE ENOKEY=126 ENOMSG=42 EILSEQ=84)
