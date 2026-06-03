@@ -1,6 +1,3 @@
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,14 +32,19 @@ static Key_t Keyset[NUM_GROUPS][MAX_KEYS_PER_GROUP];
 
 static u8 CardID[8];
 static u8 CardKey[8];
+static int KeysInitialized;
+
+static void InitKeys(void);
 
 u8 *GetCardId(void)
 {
+	InitKeys();
 	return CardID;
 }
 
 u8 *GetCardKey(void)
 {
+	InitKeys();
 	return CardKey;
 }
 
@@ -73,6 +75,8 @@ s32 Register(u8 BroadcasterGroupID, u8 WorkKeyID, const u8 *Key)
 s32 GetKey(u8 BroadcasterGroupID, u8 WorkKeyID, u8 *Key)
 {
 	int gidx, kidx;
+
+	InitKeys();
 
 	if (Key == NULL)
 		return -1;
@@ -173,11 +177,14 @@ static int load_keys(const char *fname)
 }
 
 /* (Re)read config file and set work keys */
-static void __attribute__ ((constructor)) InitKeys(void)
+static void InitKeys(void)
 {
 	const char *val;
 	char fname[256];
-	size_t len;
+
+	if (KeysInitialized)
+		return;
+	KeysInitialized = 1;
 
 	memset(Keyset, 0xff, sizeof(Keyset));
 
@@ -192,6 +199,7 @@ static void __attribute__ ((constructor)) InitKeys(void)
 		return;
 
 	strncpy(fname, DEFAULT_SYS_KEYS_FILE, sizeof(fname));
+	fname[sizeof(fname) - 1] = '\0';
 	load_keys(fname);
 	return;
-} 
+}
