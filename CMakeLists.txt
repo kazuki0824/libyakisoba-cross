@@ -27,8 +27,6 @@ target_include_directories(yakisoba
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/compat
 )
 
 target_compile_definitions(yakisoba
@@ -40,14 +38,10 @@ if(BUILD_SHARED_LIBS)
   target_compile_definitions(yakisoba PUBLIC YAKISOBA_SHARED)
 endif()
 
-if(WIN32 AND NOT CYGWIN)
-  target_link_libraries(yakisoba PRIVATE ws2_32)
-endif()
-
 if(MSVC)
   target_compile_options(yakisoba PRIVATE /W4)
 else()
-  target_compile_options(yakisoba PRIVATE -Wall -Wextra -Wpedantic -fno-strict-aliasing)
+  target_compile_options(yakisoba PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 set_target_properties(yakisoba PROPERTIES
