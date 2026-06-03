@@ -1,10 +1,10 @@
-#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include "yakisoba.h"
 #include "Global.h"
 #include "Crypto.h"
 #include "Keyset.h"
+#include "yakisoba_errno.h"
 
 typedef struct {
 	u8 CardID[6];
