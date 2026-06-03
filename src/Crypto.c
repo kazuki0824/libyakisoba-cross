@@ -1,4 +1,3 @@
-#include <arpa/inet.h>
 #include <string.h>
 #include "Global.h"
 #include "Crypto.h"
@@ -36,13 +35,87 @@ static const u8 InitialisationVector2[8] = { 0x70, 0x39, 0xCD, 0x1A, 0x46, 0x52,
 
 //
 
-typedef union {
+typedef struct {
 	u32 Word;
-	u16 Short[2];
-	u8 Byte[4];
 } Word_t;
 
 //
+
+static u32 LoadLE32(const u8 *p)
+{
+	return ((u32)p[0] << 0) |
+	       ((u32)p[1] << 8) |
+	       ((u32)p[2] << 16) |
+	       ((u32)p[3] << 24);
+}
+
+static u32 LoadPartialLE32(const u8 *p, u32 Size)
+{
+	u32 Value = 0;
+
+	for (u32 i = 0; i < Size; i++)
+		Value |= (u32)p[i] << (i * 8);
+
+	return Value;
+}
+
+static void StoreLE32(u8 *p, u32 Value)
+{
+	p[0] = (u8)(Value >> 0);
+	p[1] = (u8)(Value >> 8);
+	p[2] = (u8)(Value >> 16);
+	p[3] = (u8)(Value >> 24);
+}
+
+static u64 LoadLE64(const u8 *p)
+{
+	return ((u64)LoadLE32(p)) | ((u64)LoadLE32(p + 4) << 32);
+}
+
+static u64 LoadWordsLE64(const Word_t *Words)
+{
+	return ((u64)Words[0].Word) | ((u64)Words[1].Word << 32);
+}
+
+static void StoreWordsLE64(Word_t *Words, u64 Value)
+{
+	Words[0].Word = (u32)Value;
+	Words[1].Word = (u32)(Value >> 32);
+}
+
+static u32 BSwap32(u32 Value)
+{
+	return ((Value & 0x000000ff) << 24) |
+	       ((Value & 0x0000ff00) << 8) |
+	       ((Value & 0x00ff0000) >> 8) |
+	       ((Value & 0xff000000) >> 24);
+}
+
+static u8 WordByte(u32 Word, unsigned Index)
+{
+	return (u8)(Word >> (Index * 8));
+}
+
+static u32 SetWordByte(u32 Word, unsigned Index, u8 Value)
+{
+	u32 Shift = (u32)Index * 8;
+	u32 Mask = (u32)0xff << Shift;
+
+	return (Word & ~Mask) | ((u32)Value << Shift);
+}
+
+static u16 WordBE16Lane(u32 Word, unsigned Lane)
+{
+	return (u16)(((u16)WordByte(Word, Lane * 2) << 8) |
+	             ((u16)WordByte(Word, Lane * 2 + 1)));
+}
+
+static u32 SetWordBE16Lane(u32 Word, unsigned Lane, u16 Value)
+{
+	Word = SetWordByte(Word, Lane * 2, (u8)(Value >> 8));
+	Word = SetWordByte(Word, Lane * 2 + 1, (u8)Value);
+	return Word;
+}
 
 static u32 SwapNibbles(u32 W)
 {
@@ -51,10 +124,10 @@ static u32 SwapNibbles(u32 W)
 
 static u32 RotateLeft(u32 Value)
 {
-	Value = ntohl(Value);
+	Value = BSwap32(Value);
 	Value = (Value << 1) | (Value >> 31);
 
-	return htonl(Value);
+	return BSwap32(Value);
 }
 
 static u8 RotateByteLeft(u8 Value)
@@ -88,39 +161,50 @@ static u8 GetBox(u8 Round, u8 WorkKey)
 
 static void Scramble(Word_t *Tmp)
 {
+	u8 b0, b1, b2, b3;
+
 	Tmp[0].Word ^= Tmp[1].Word;
-	Tmp[0].Byte[0] = LookupTable[Tmp[0].Byte[0]];
-	Tmp[0].Byte[1] = LookupTable[Tmp[0].Byte[1]];
-	Tmp[0].Byte[2] = LookupTable[Tmp[0].Byte[2]];
-	Tmp[0].Byte[3] = LookupTable[Tmp[0].Byte[3]];
-	Tmp[0].Byte[1] ^= RotateByteLeft(Tmp[0].Byte[0]);
-	Tmp[0].Byte[0] ^= RotateByteLeft(Tmp[0].Byte[1]);
-	Tmp[0].Byte[3] ^= RotateByteLeft(Tmp[0].Byte[2]);
-	Tmp[0].Byte[2] ^= RotateByteLeft(Tmp[0].Byte[3]);
-	Tmp[0].Byte[1] ^= RotateByteLeft(RotateByteLeft(Tmp[0].Byte[2]));
-	Tmp[0].Byte[2] ^= RotateByteLeft(RotateByteLeft(Tmp[0].Byte[1]));
-	Tmp[0].Byte[3] ^= RotateByteLeft(RotateByteLeft(Tmp[0].Byte[0]));
-	Tmp[0].Byte[0] ^= RotateByteLeft(RotateByteLeft(Tmp[0].Byte[3]));
+
+	b0 = LookupTable[WordByte(Tmp[0].Word, 0)];
+	b1 = LookupTable[WordByte(Tmp[0].Word, 1)];
+	b2 = LookupTable[WordByte(Tmp[0].Word, 2)];
+	b3 = LookupTable[WordByte(Tmp[0].Word, 3)];
+	b1 ^= RotateByteLeft(b0);
+	b0 ^= RotateByteLeft(b1);
+	b3 ^= RotateByteLeft(b2);
+	b2 ^= RotateByteLeft(b3);
+	b1 ^= RotateByteLeft(RotateByteLeft(b2));
+	b2 ^= RotateByteLeft(RotateByteLeft(b1));
+	b3 ^= RotateByteLeft(RotateByteLeft(b0));
+	b0 ^= RotateByteLeft(RotateByteLeft(b3));
+
+	Tmp[0].Word = ((u32)b0 << 0) |
+	              ((u32)b1 << 8) |
+	              ((u32)b2 << 16) |
+	              ((u32)b3 << 24);
 }
 
 static void BlockCipher(Word_t *Cipher, Word_t Pass, u8 Box)
 {
 	u8 Counter = (Box & 2) ? 0x53 : 0;
 	u16 CC = (Counter << 8) | Counter;
+	u32 T;
 
-	Cipher->Short[0] = htons(ntohs(Cipher->Short[0]) + ntohs(Pass.Short[0]) + CC);
-	Cipher->Short[1] = htons(ntohs(Cipher->Short[1]) + ntohs(Pass.Short[1]) + CC);
+	Cipher->Word = SetWordBE16Lane(Cipher->Word, 0,
+					  (u16)(WordBE16Lane(Cipher->Word, 0) + WordBE16Lane(Pass.Word, 0) + CC));
+	Cipher->Word = SetWordBE16Lane(Cipher->Word, 1,
+					  (u16)(WordBE16Lane(Cipher->Word, 1) + WordBE16Lane(Pass.Word, 1) + CC));
 	Cipher->Word = SwapNibbles(Cipher->Word);
 
 	u32 Rot = RotateLeft(Pass.Word);
 	u32 Mask = Cipher->Word & Rot;
-	u8 x = (Mask >> 24) ^ (Mask >> 16) ^ (Mask >> 8) ^ Mask;
+	u8 x = (u8)((Mask >> 24) ^ (Mask >> 16) ^ (Mask >> 8) ^ Mask);
 
 	if (IsOddParity(x) == TRUE) {
 		Cipher->Word ^= 0xffffffff ^ Rot;
 	}
 
-	u32 T = ntohl(Cipher->Word);
+	T = BSwap32(Cipher->Word);
 
 	if ((Box & 1) == 0) {
 		T =	((T & 0x00000055) <<  1) | ((T & 0x0000aa00) <<  7) |
@@ -134,13 +218,15 @@ static void BlockCipher(Word_t *Cipher, Word_t Pass, u8 Box)
 			((T & 0x000000aa) >>  1) | ((T & 0x0055aa00) >>  8) | ((T & 0x55000000) >> 15);
 	}
 
-	Cipher->Word = htonl(T);
-	Cipher->Word ^= htonl((T << 8) | (T >> 24)) ^ RotateLeft(Cipher->Word);
+	Cipher->Word = BSwap32(T);
+	Cipher->Word ^= BSwap32((T << 8) | (T >> 24)) ^ RotateLeft(Cipher->Word);
 }
 
 static void ProcessBlockCipher0x(u8 Protocol, Word_t *Cipher, const u8 *Key, int DecryptionMode)
 {
 	u8 Start, End, Step;
+
+	(void)Protocol;
 
 	if (DecryptionMode == TRUE) {
 		Start = 0x0f;
@@ -162,7 +248,7 @@ static void ProcessBlockCipher0x(u8 Protocol, Word_t *Cipher, const u8 *Key, int
 
 		u8 Box = GetBox(Round, DecryptionMode);
 
-		Pass.Word = *(u32 *)&Key[(Round & 3) << 2];
+		Pass.Word = LoadLE32(&Key[(Round & 3) << 2]);
 		BlockCipher(&Cipher[0], Pass, Box);
 
 		Cipher[1].Word ^= Cipher[0].Word;
@@ -176,15 +262,17 @@ static void ProcessBlockCipher0x(u8 Protocol, Word_t *Cipher, const u8 *Key, int
 
 void ProcessBlockCipher4x(u8 Protocol, Word_t *Cipher, const u8 *Key, int DecryptionMode)
 {
-	u64 *E = (u64 *)Cipher;
-	const u64 *IV;
+	const u8 *IV;
+	u64 E;
 
 	if (Protocol & 0x0c)
-		IV = (const u64 *)InitialisationVector2;
+		IV = InitialisationVector2;
 	else
-		IV = (const u64 *)InitialisationVector1;
+		IV = InitialisationVector1;
 
-	*E += *IV;
+	E = LoadWordsLE64(Cipher);
+	E += LoadLE64(IV);
+	StoreWordsLE64(Cipher, E);
 
 	u8 Index, Step;
 	if (DecryptionMode == TRUE) {
@@ -194,11 +282,10 @@ void ProcessBlockCipher4x(u8 Protocol, Word_t *Cipher, const u8 *Key, int Decryp
 		Index = 0x00;
 		Step = 0x01;
 	}
-	const u32 *P = (const u32 *)Key;
 	for (u8 i = 0 ; i < 16 ; i++) {
 		Word_t Tmp[2];
 		Tmp[0].Word = Cipher[1].Word;
-		Tmp[1].Word = P[Index];
+		Tmp[1].Word = LoadLE32(Key + ((u32)Index * 4));
 		Index += Step;
 		Scramble(Tmp);
 		Cipher[0].Word ^= Tmp[0].Word;
@@ -210,7 +297,9 @@ void ProcessBlockCipher4x(u8 Protocol, Word_t *Cipher, const u8 *Key, int Decryp
 		}
 	}
 
-	*E -= *IV;
+	E = LoadWordsLE64(Cipher);
+	E -= LoadLE64(IV);
+	StoreWordsLE64(Cipher, E);
 }
 
 static void SetupKeySchedule0x(u8 Protocol, const u8 *InKey, u8 *Schedule)
@@ -229,17 +318,17 @@ static void SetupKeySchedule0x(u8 Protocol, const u8 *InKey, u8 *Schedule)
 		Key[i] = i;
 
 	if (Protocol & 0x0c)
-		memcpy(&Pass.Word, IV[1], 4);
+		Pass.Word = LoadLE32(IV[1]);
 	else
-		memcpy(&Pass.Word, IV[0], 4);
+		Pass.Word = LoadLE32(IV[0]);
 
 	for (int i = 0 ; i < 8 ; i++) {
 		Word_t Cipher;
 
-		memcpy(&Cipher, Key + ((i & 3) << 2), 4);
+		Cipher.Word = LoadLE32(Key + ((i & 3) << 2));
 		BlockCipher(&Cipher, Pass, 0);
 		Pass.Word = Cipher.Word;
-		memcpy(Key + ((i & 3) << 2), &Cipher, 4);
+		StoreLE32(Key + ((i & 3) << 2), Cipher.Word);
 	}
 
 	memcpy(Schedule, Key, 16);
@@ -249,6 +338,7 @@ static void SetupKeySchedule4x(u8 Protocol, const u8 *InKey, u8 *Schedule)
 {
 	u8 Key[8], x;
 
+	(void)Protocol;
 	memcpy(Key, InKey, 8);
 
 	for (u8 i = 0, j = 0 ; i < 16 ; i++, j += 4) {
@@ -274,7 +364,7 @@ void Transform(u8 Protocol, const u8 *Key, const u8 *Input, u32 Size, u8 *Output
 	u32 Remainder = Size - (AlignedSize * 8);
 
 	const u8 IV[8] = { 0xfe, 0x27, 0x19, 0x99, 0x19, 0x69, 0x09, 0x11 };
-	const u32 *Previous = (const u32 *)IV;
+	u32 Previous[2];
 
 	u8 Schedule128[16];
 	u8 Schedule512[64];
@@ -284,13 +374,21 @@ void Transform(u8 Protocol, const u8 *Key, const u8 *Input, u32 Size, u8 *Output
 		u8 CipherBytes[8];
 	} u;
 
+	Previous[0] = LoadLE32(IV);
+	Previous[1] = LoadLE32(IV + 4);
+
 	if (Protocol & 0x40)
 		SetupKeySchedule4x(Protocol, Key, Schedule512);
 	else
 		SetupKeySchedule0x(Protocol, Key, Schedule128);
 
 	for ( ; AlignedSize > 0 ; AlignedSize--) {
-		memcpy(u.Cipher, Input, 8);
+		u32 InputWords[2];
+
+		InputWords[0] = LoadLE32(Input);
+		InputWords[1] = LoadLE32(Input + 4);
+		u.Cipher[0].Word = InputWords[0];
+		u.Cipher[1].Word = InputWords[1];
 
 		if (Decryption == FALSE) {
 			u.Cipher[0].Word ^= Previous[0];
@@ -307,29 +405,36 @@ void Transform(u8 Protocol, const u8 *Key, const u8 *Input, u32 Size, u8 *Output
 			u.Cipher[1].Word ^= Previous[1];
 		}
 
-		memcpy(Output, u.Cipher, 8);
+		StoreLE32(Output, u.Cipher[0].Word);
+		StoreLE32(Output + 4, u.Cipher[1].Word);
 
-		if (Decryption == FALSE)
-			Previous = (u32 *)Output;
-		else
-			Previous = (u32 *)Input;
+		if (Decryption == FALSE) {
+			Previous[0] = u.Cipher[0].Word;
+			Previous[1] = u.Cipher[1].Word;
+		} else {
+			Previous[0] = InputWords[0];
+			Previous[1] = InputWords[1];
+		}
 
 		Input += 8;
 		Output += 8;
 	}
 
 	if (Remainder > 0) {
-		memcpy(u.Cipher, Previous, 8);
+		u.Cipher[0].Word = Previous[0];
+		u.Cipher[1].Word = Previous[1];
 
 		if (Protocol & 0x40)
 			ProcessBlockCipher4x(Protocol, u.Cipher, Schedule512, FALSE);
 		else
 			ProcessBlockCipher0x(Protocol, u.Cipher, Schedule128, FALSE);
 
+		StoreLE32(u.CipherBytes, u.Cipher[0].Word);
+		StoreLE32(u.CipherBytes + 4, u.Cipher[1].Word);
 		for (u32 i = 0 ; i < Remainder ; i++)
 			u.CipherBytes[i] ^= Input[i];
 
-		memcpy(Output, u.Cipher, Remainder);
+		memcpy(Output, u.CipherBytes, Remainder);
 	}
 }
 
@@ -372,22 +477,22 @@ static void GenerateMAC4x(u8 Protocol, const u8 *Key, const u8 *Payload, u32 Siz
 	u32 AlignedSize = Size / 4;
 	u32 UnalignedSize = Size - (AlignedSize * 4);
 	Word_t Tmp[2];
-	u32 *IV;
+	const u8 *IV;
 	Word_t Counter;
 
 
 	if (Protocol & 0x0c)
-		IV = (u32 *)InitialisationVector2;
+		IV = InitialisationVector2;
 	else
-		IV = (u32 *)InitialisationVector1;
+		IV = InitialisationVector1;
 
 	Counter.Word = 0;
-	Tmp[1].Word = IV[0];
-	Tmp[0].Word = *(const u32 *)Key;
+	Tmp[1].Word = LoadLE32(IV);
+	Tmp[0].Word = LoadLE32(Key);
 	sub_B1D4(Tmp, &Counter);
 
 	for ( ; AlignedSize > 0 ; AlignedSize--) {
-		memcpy(&Tmp[0].Word, Payload, 4);
+		Tmp[0].Word = LoadLE32(Payload);
 		sub_B1D4(Tmp, &Counter);
 		Payload += 4;
 	}
@@ -398,8 +503,7 @@ static void GenerateMAC4x(u8 Protocol, const u8 *Key, const u8 *Payload, u32 Siz
 	case 1:
 	case 2:
 	case 3:
-		Tmp[0].Word = 0;
-		memcpy(&Tmp[0].Word, Payload, UnalignedSize);
+		Tmp[0].Word = LoadPartialLE32(Payload, UnalignedSize);
 		sub_B1D4(Tmp, &Counter);
 		// Fallthrough
 	case 4:
@@ -409,20 +513,19 @@ static void GenerateMAC4x(u8 Protocol, const u8 *Key, const u8 *Payload, u32 Siz
 	default:
 		if (UnalignedSize == 0)
 			break;
-		Tmp[0].Word = 0;
-		memcpy(&Tmp[0].Word, Payload, UnalignedSize);
+		Tmp[0].Word = LoadPartialLE32(Payload, UnalignedSize);
 		sub_B1D4(Tmp, &Counter);
 		break;
 	}
 
-	Tmp[0].Word = IV[1];
-	Tmp[0].Word += *(u32 *)(Key + 4);
+	Tmp[0].Word = LoadLE32(IV + 4);
+	Tmp[0].Word += LoadLE32(Key + 4);
 	Tmp[0].Word += Counter.Word;
 
 	Tmp[0].Word++;
 	sub_B1D4(Tmp, &Counter);
 
-	memcpy(MAC, Tmp[1].Byte, 4);
+	StoreLE32(MAC, Tmp[1].Word);
 }
 
 static void GenerateMAC0x(const u8 *Key, const u8 *Payload, u32 Size, u8 *MAC)
@@ -432,14 +535,16 @@ static void GenerateMAC0x(const u8 *Key, const u8 *Payload, u32 Size, u8 *MAC)
 	u32 IV[2];
 	u32 Seed[2];
 
-	memcpy(Seed, Key, 8);
+	Seed[0] = LoadLE32(Key);
+	Seed[1] = LoadLE32(Key + 4);
 
 	memset(&IV, 0, sizeof(IV));
 
-	Word_t Plain[2];
+	Word_t Plain[2] = { { 0 }, { 0 } };
 
 	for ( ; AlignedSize > 0 ; AlignedSize--) {
-		memcpy(Plain, Payload, 8);
+		Plain[0].Word = LoadLE32(Payload);
+		Plain[1].Word = LoadLE32(Payload + 4);
 		Plain[0].Word ^= IV[0];
 		Plain[1].Word ^= IV[1];
 
@@ -453,13 +558,18 @@ static void GenerateMAC0x(const u8 *Key, const u8 *Payload, u32 Size, u8 *MAC)
 	if (UnalignedSize > 0) {
 		Plain[0].Word = 0;
 		Plain[1].Word = 0;
-		memcpy(Plain, Payload, UnalignedSize);
+		if (UnalignedSize <= 4) {
+			Plain[0].Word = LoadPartialLE32(Payload, UnalignedSize);
+		} else {
+			Plain[0].Word = LoadLE32(Payload);
+			Plain[1].Word = LoadPartialLE32(Payload + 4, UnalignedSize - 4);
+		}
 		Plain[0].Word ^= IV[0];
 		Plain[1].Word ^= IV[1];
 		ProcessMAC0x(Plain, Seed);
 	}
 
-	memcpy(MAC, &Plain[1], 4);
+	StoreLE32(MAC, Plain[1].Word);
 }
 
 void GenerateMAC(u8 Protocol, const u8 *Key, const u8 *Payload, u32 Size, u8 *MAC)

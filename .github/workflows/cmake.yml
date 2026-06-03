@@ -1,0 +1,196 @@
+name: CMake
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native:
+    name: Native (${{ matrix.os }}, ${{ matrix.shared }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        shared: [ON, OFF]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+  windows-msvc:
+    name: Windows MSVC (${{ matrix.arch }}, ${{ matrix.shared }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, Win32]
+        shared: [ON, OFF]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A ${{ matrix.arch }} -DBUILD_SHARED_LIBS=${{ matrix.shared }}
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+  windows-msys2:
+    name: Windows MSYS2 (${{ matrix.msystem }}, ${{ matrix.shared }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - msystem: MINGW64
+            packages: >-
+              mingw-w64-x86_64-cmake
+              mingw-w64-x86_64-ninja
+              mingw-w64-x86_64-gcc
+          - msystem: MINGW32
+            packages: >-
+              mingw-w64-i686-cmake
+              mingw-w64-i686-ninja
+              mingw-w64-i686-gcc
+          - msystem: MSYS
+            packages: >-
+              cmake
+              ninja
+              gcc
+        shared: [ON, OFF]
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: ${{ matrix.packages }}
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+  windows-cygwin:
+    name: Windows Cygwin (${{ matrix.shared }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shared: [ON, OFF]
+
+    steps:
+      - run: git config --global core.autocrlf input
+
+      - uses: actions/checkout@v4
+
+      - uses: cygwin/cygwin-install-action@v6
+        with:
+          packages: >-
+            cmake
+            ninja
+            gcc-core
+
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release
+
+      - name: Test
+        shell: bash
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+  android:
+    name: Android NDK (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86, x86_64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager "ndk;27.2.12479018"
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake"
+          -DANDROID_ABI=${{ matrix.abi }}
+          -DANDROID_PLATFORM=android-23
+          -DBUILD_SHARED_LIBS=ON
+          -DYAKISOBA_BUILD_TESTS=OFF
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+  wasm:
+    name: WebAssembly
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mymindstorm/setup-emsdk@v14
+
+      - name: Configure
+        run: emcmake cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+  endian:
+    name: Endian check (s390x big-endian)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: uraimo/run-on-arch-action@v3
+        name: Build and test on s390x
+        with:
+          arch: none
+          distro: none
+          base_image: --platform=linux/s390x debian:bookworm-slim
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends build-essential cmake ninja-build ca-certificates
+            rm -rf /var/lib/apt/lists/*
+          run: |
+            cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+            cmake --build build --config Release
+            ctest --test-dir build --build-config Release --output-on-failure

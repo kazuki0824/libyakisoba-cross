@@ -7,6 +7,18 @@ extern "C" {
 
 #include <stdint.h>
 
+#if defined(YAKISOBA_SHARED) && defined(_WIN32)
+#  if defined(yakisoba_EXPORTS)
+#    define YAKISOBA_API __declspec(dllexport)
+#  else
+#    define YAKISOBA_API __declspec(dllimport)
+#  endif
+#elif defined(YAKISOBA_SHARED) && defined(__GNUC__)
+#  define YAKISOBA_API __attribute__((visibility("default")))
+#else
+#  define YAKISOBA_API
+#endif
+
 /**
  * \brief Decrypt an ECM payload
  * 
@@ -21,7 +33,7 @@ extern "C" {
  * @retval -ENOKEY      Missing the work key for BroadcasterGroupD and WorkKeyID
  * @retval -EILSEQ      MAC mismatch
  */
-int bcas_decodeECM(const uint8_t *Payload, uint32_t Size, uint8_t *Keys, uint8_t *VarPart);
+YAKISOBA_API int bcas_decodeECM(const uint8_t *Payload, uint32_t Size, uint8_t *Keys, uint8_t *VarPart);
 
 
 /**
@@ -36,7 +48,7 @@ int bcas_decodeECM(const uint8_t *Payload, uint32_t Size, uint8_t *Keys, uint8_t
  * @retval -EINVAL      @a Paylod is NULL, or @a Size too small
  * @retval -EILSEQ      MAC mismatch
  */
-int bcas_decodeEMM(const uint8_t *Payload, uint32_t Size, uint8_t *Out, int Individual);
+YAKISOBA_API int bcas_decodeEMM(const uint8_t *Payload, uint32_t Size, uint8_t *Out, int Individual);
 
 #ifdef __cplusplus
 }
