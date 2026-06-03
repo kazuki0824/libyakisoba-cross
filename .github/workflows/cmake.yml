@@ -182,12 +182,14 @@ jobs:
       - uses: uraimo/run-on-arch-action@v3
         name: Build and test on s390x
         with:
-          arch: s390x
-          distro: ubuntu_latest
+          arch: none
+          distro: none
+          base_image: --platform=linux/s390x debian:bookworm-slim
           githubToken: ${{ github.token }}
           install: |
             apt-get update
             apt-get install -y --no-install-recommends build-essential cmake ninja-build ca-certificates
+            rm -rf /var/lib/apt/lists/*
           run: |
             cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
             cmake --build build --config Release
