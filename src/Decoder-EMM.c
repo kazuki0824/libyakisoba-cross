@@ -19,7 +19,6 @@ typedef struct {
 	u8 FixedMessageID[2];
 	u8 ExtraMessageFormatVer;
 	u8 ExtraMessageLength[2];
-	u8 ExtraMessageCode[0];
 } EMD_Header_t /* __attribute__ ((packed)) */;
 
 typedef struct {
@@ -29,7 +28,6 @@ typedef struct {
 	u8 BroadcasterGroupID;
 	u8 UpdateNumber[2];
 	u8 ExpiryDate[2];
-	u8 Payload[0];
 } EMM_Header_t /* __attribute__ ((packed)) */;
 
 
