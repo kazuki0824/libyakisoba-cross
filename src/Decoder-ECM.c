@@ -1,9 +1,9 @@
-#include <errno.h>
 #include <string.h>
 #include "yakisoba.h"
 #include "Global.h"
 #include "Crypto.h"
 #include "Keyset.h"
+#include "yakisoba_errno.h"
 
 typedef struct {
 	// 0x00
