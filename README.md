@@ -7,31 +7,50 @@ ECMのbodyを受け取り復号しスクランブルキーK\_sを返す。
 
 ## ビルド
 
-```
-$ git clone https://github.com//libyakisoba
-$ cd libyakisoba; autoreconf -i; mkdir build; cd build
-$ ../configure #(必要に応じて --prefixや--sysconfdir, --libdirを設定)
-$ make
-$ (sudo make install)
+CMake 3.16 以降が必要です。
+
+```sh
+git clone https://github.com/kazuki0824/libyakisoba-cross.git
+cd libyakisoba-cross
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+cmake --install build
 ```
 
-### [注意]
+共有ライブラリを無効化する場合は `-DBUILD_SHARED_LIBS=OFF` を指定します。
 
-デフォルトでは`--prefix=/usr/local`で構成されるので、
-本ライブラリは他のシステムライブラリとは別に  
-`/usr/local/lib[64]`, `/usr/local/include`, `/usr/local/etc`にインストールされる。  
-Fedora等のシステムではデフォルトで`/usr/local/lib64`を`ldconfig`が検索**しない**ので、
+```sh
+cmake -S . -B build -DBUILD_SHARED_LIBS=OFF
+cmake --build build
 ```
-$ echo /usr/local/lib64 > /etc/ld.so.conf.d/local64.conf
+
+### Android NDK
+
+Android NDK の CMake toolchain を指定してビルドします。
+
+```sh
+cmake -S . -B build-android \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-23 \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build-android
 ```
-などの追加設定が必要となることに注意。  
-これらの設定やインストールを行わずに、LD\_LIBRARY\_PATHを指定して直接利用することも可能。
+
+### WebAssembly / Emscripten
+
+```sh
+emcmake cmake -S . -B build-wasm -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build-wasm
+ctest --test-dir build-wasm --output-on-failure
+```
 
 ## 使用方法
 
 - クライアントプログラムのソースで `#include <yakisoba.h>`する。
 - `bcas_decodeECM()` や `bcas_decodeEMM()` をコールする。(yakisoba.h を参照)
-- `libyakisoba.so` をリンクする。 (`-lyakisoba`)
+- `yakisoba::yakisoba` CMake target、または `-lyakisoba` でリンクする。
 - 実行前にあらかじめキーを記述した設定ファイルを用意しておく。
 
 ## 設定ファイル
@@ -46,4 +65,3 @@ $ echo /usr/local/lib64 > /etc/ld.so.conf.d/local64.conf
 
 EMMのデコードを行う場合は、
 カードID及びマスターキーK\_mの値も、上記設定ファイルに記述する必要がある。
-
