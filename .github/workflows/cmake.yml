@@ -187,7 +187,7 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends cmake ninja-build gcc ca-certificates
+            apt-get install -y --no-install-recommends build-essential cmake ninja-build ca-certificates
           run: |
             cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
             cmake --build build --config Release
