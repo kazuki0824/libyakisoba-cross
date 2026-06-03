@@ -40,7 +40,7 @@ if(BUILD_SHARED_LIBS)
   target_compile_definitions(yakisoba PUBLIC YAKISOBA_SHARED)
 endif()
 
-if(WIN32)
+if(WIN32 AND NOT CYGWIN)
   target_link_libraries(yakisoba PRIVATE ws2_32)
 endif()
 
