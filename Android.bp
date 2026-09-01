@@ -1,0 +1,30 @@
+package {
+    default_applicable_licenses: ["libyakisoba_license"],
+}
+
+license {
+    name: "libyakisoba_license",
+    visibility: [":__subpackages__"],
+    license_kinds: ["SPDX-license-identifier-GPL-3.0-only"],
+    license_text: ["COPYING"],
+}
+
+cc_library {
+    name: "libyakisoba",
+    srcs: [
+        "src/Crypto.c",
+        "src/Decoder-ECM.c",
+        "src/Decoder-EMM.c",
+        "src/Keyset.c",
+    ],
+    export_include_dirs: ["include"],
+    c_std: "c99",
+    cflags: [
+        "-Wall",
+        "-fvisibility=hidden",
+    ],
+    shared: {
+        cflags: ["-DYAKISOBA_SHARED"],
+    },
+    vendor_available: true,
+}
