@@ -30,7 +30,7 @@ jobs:
 
   windows-msvc:
     name: Windows MSVC (${{ matrix.arch }}, ${{ matrix.shared }})
-    runs-on: windows-latest
+    runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
@@ -186,7 +186,7 @@ jobs:
         with:
           arch: none
           distro: none
-          base_image: --platform=linux/s390x debian:bookworm-slim
+          base_image: --platform=linux/s390x s390x/debian:bookworm-slim
           githubToken: ${{ github.token }}
           install: |
             apt-get update
